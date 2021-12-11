@@ -3,16 +3,7 @@
 #include <stdint.h>
 #include <assert.h>
 #include "reedsolomon/rs.h"
-
-// Maximum UDP packet size (payload size in bytes)
-static const int ALVR_MAX_PACKET_SIZE = 1400;
-
-// Maximum UDP packet size
-static const int MAX_PACKET_UDP_PACKET_SIZE = 2000;
-
-// Guardian syncing constants
-static const int ALVR_GUARDIAN_SEGMENT_SIZE = 100;
-static const double ALVR_GUARDIAN_RESEND_CD_SEC = 1.0;
+#include "../app/src/main/cpp/bindings.h"
 
 enum ALVR_PACKET_TYPE {
 	ALVR_PACKET_TYPE_TRACKING_INFO = 6,
@@ -123,6 +114,7 @@ enum ALVR_TRACKING_SPACE {
 #define ALVR_BUTTON_FLAG(input) (1ULL << input)
 
 static const int ALVR_MAX_VIDEO_BUFFER_SIZE = 1400;
+<<<<<<< HEAD
 #pragma pack(push, 1)
 // Represent FOV for each eye in degree. Default is left eye for Quest 2
 struct EyeFov {
@@ -277,6 +269,8 @@ struct HapticsFeedback {
 #pragma pack(pop)
 
 static const int ALVR_MAX_VIDEO_BUFFER_SIZE = ALVR_MAX_PACKET_SIZE - sizeof(VideoFrame);
+=======
+>>>>>>> 398452cd (Packets rework (#884))
 
 static const int ALVR_FEC_SHARDS_MAX = 20;
 
