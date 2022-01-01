@@ -167,10 +167,6 @@ struct TrackingInfo {
 	double predictedDisplayTime;
 	TrackingQuat HeadPose_Pose_Orientation;
 	TrackingVector3 HeadPose_Pose_Position;
-	TrackingVector3 HeadPose_AngularVelocity;
-	TrackingVector3 HeadPose_LinearVelocity;
-	TrackingVector3 HeadPose_AngularAcceleration;
-	TrackingVector3 HeadPose_LinearAcceleration;
 
 	TrackingVector3 Other_Tracking_Source_Position;
 	TrackingQuat Other_Tracking_Source_Orientation;
@@ -290,7 +286,7 @@ struct HapticsFeedback {
 };
 #pragma pack(pop)
 
-static const int ALVR_MAX_VIDEO_BUFFER_SIZE = ALVR_MAX_PACKET_SIZE - sizeof(VideoFrame);
+static const int ALVR_MAX_VIDEO_BUFFER_SIZE = 1400;
 
 static const int ALVR_FEC_SHARDS_MAX = 20;
 

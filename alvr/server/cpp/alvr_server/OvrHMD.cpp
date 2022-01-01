@@ -143,8 +143,7 @@ vr::EVRInitError OvrHmd::Activate(vr::TrackedDeviceIndex_t unObjectId)
 		vr::VRProperties()->SetFloatProperty(m_ulPropertyContainer, vr::Prop_UserIpdMeters_Float, Settings::Instance().m_flIPD);
 		vr::VRProperties()->SetFloatProperty(m_ulPropertyContainer, vr::Prop_UserHeadToEyeDepthMeters_Float, 0.f);
 		vr::VRProperties()->SetFloatProperty(m_ulPropertyContainer, vr::Prop_DisplayFrequency_Float, static_cast<float>(Settings::Instance().m_refreshRate));
-		vr::VRProperties()->SetFloatProperty(m_ulPropertyContainer, vr::Prop_SecondsFromVsyncToPhotons_Float, 0.);
-		//vr::VRProperties()->SetFloatProperty(m_ulPropertyContainer, vr::Prop_SecondsFromVsyncToPhotons_Float, Settings::Instance().m_flSecondsFromVsyncToPhotons);
+		vr::VRProperties()->SetFloatProperty(m_ulPropertyContainer, vr::Prop_SecondsFromVsyncToPhotons_Float, Settings::Instance().m_flSecondsFromVsyncToPhotons);
 
 		// return a constant that's not 0 (invalid) or 1 (reserved for Oculus)
 		vr::VRProperties()->SetUint64Property(m_ulPropertyContainer, vr::Prop_CurrentUniverseId_Uint64, Settings::Instance().m_universeId);
@@ -292,13 +291,6 @@ vr::EVRInitError OvrHmd::Activate(vr::TrackedDeviceIndex_t unObjectId)
 			pose.vecPosition[1] = info.HeadPose_Pose_Position.y;
 			pose.vecPosition[2] = info.HeadPose_Pose_Position.z;
 
-			pose.vecVelocity[0] = info.HeadPose_LinearVelocity.x;
-			pose.vecVelocity[1] = info.HeadPose_LinearVelocity.y;
-			pose.vecVelocity[2] = info.HeadPose_LinearVelocity.z;
-			pose.vecAcceleration[0] = info.HeadPose_LinearAcceleration.x;
-			pose.vecAcceleration[1] = info.HeadPose_LinearAcceleration.y;
-			pose.vecAcceleration[2] = info.HeadPose_LinearAcceleration.z;
-
 			// set battery percentage
 			vr::VRProperties()->SetBoolProperty(m_ulPropertyContainer, vr::Prop_DeviceIsCharging_Bool, info.plugged);
 			vr::VRProperties()->SetFloatProperty(m_ulPropertyContainer, vr::Prop_DeviceBatteryPercentage_Float, info.battery / 100.0f);
@@ -313,7 +305,9 @@ vr::EVRInitError OvrHmd::Activate(vr::TrackedDeviceIndex_t unObjectId)
 				pose.vecPosition[2]
 			);
 
-			pose.poseTimeOffset = m_Listener->GetPoseTimeOffset();
+			// To disable time warp (or pose prediction), we dont set (set to zero) velocity and acceleration.
+
+			pose.poseTimeOffset = 0;
 		}
 
 		return pose;

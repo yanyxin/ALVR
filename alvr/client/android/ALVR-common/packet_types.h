@@ -122,6 +122,7 @@ enum ALVR_TRACKING_SPACE {
 };
 #define ALVR_BUTTON_FLAG(input) (1ULL << input)
 
+static const int ALVR_MAX_VIDEO_BUFFER_SIZE = 1400;
 #pragma pack(push, 1)
 // Represent FOV for each eye in degree. Default is left eye for Quest 2
 struct EyeFov {
@@ -156,10 +157,6 @@ struct TrackingInfo {
 	double predictedDisplayTime;
 	TrackingQuat HeadPose_Pose_Orientation;
 	TrackingVector3 HeadPose_Pose_Position;
-	TrackingVector3 HeadPose_AngularVelocity;
-	TrackingVector3 HeadPose_LinearVelocity;
-	TrackingVector3 HeadPose_AngularAcceleration;
-	TrackingVector3 HeadPose_LinearAcceleration;
 
 	TrackingVector3 Other_Tracking_Source_Position;
 	TrackingQuat Other_Tracking_Source_Orientation;
