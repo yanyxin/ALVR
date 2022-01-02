@@ -268,7 +268,7 @@ struct HapticsFeedback {
 };
 #pragma pack(pop)
 
-static const int ALVR_MAX_VIDEO_BUFFER_SIZE = ALVR_MAX_PACKET_SIZE - sizeof(VideoFrame);
+static const int ALVR_MAX_VIDEO_BUFFER_SIZE = 1440;
 =======
 >>>>>>> 398452cd (Packets rework (#884))
 
