@@ -127,11 +127,11 @@ void VideoEncoderSW::Shutdown() {
 
 void VideoEncoderSW::Transmit(ID3D11Texture2D *pTexture, uint64_t presentationTime, uint64_t targetTimestampNs, bool insertIDR) {
 	// Handle bitrate changes
-	uint64_t bitrateMbs;
-	if(GetUpdatedBitrate(&bitrateMbs)) {
-		//Debug("Bitrate changed");
-		m_codecContext->bit_rate = bitrateMbs * 1'000'000L;
-		m_codecContext->rc_buffer_size = m_codecContext->bit_rate / m_refreshRate * 1.1;
+	auto params = GetDynamicEncoderParams();
+	if (params.updated) {
+		m_codecContext->bit_rate = params.bitrate_bps;
+		m_codecContext->framerate = AVRational{(int)params.framerate, 1};
+		m_codecContext->rc_buffer_size = m_codecContext->bit_rate / params.framerate * 1.1;
 		m_codecContext->rc_max_rate = m_codecContext->bit_rate;
 	}
 
