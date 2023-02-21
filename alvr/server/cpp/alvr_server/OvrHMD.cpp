@@ -46,9 +46,69 @@ inline vr::ETrackedDeviceClass getControllerDeviceClass() {
     return vr::TrackedDeviceClass_Controller;
 }
 
+void OvrHmd::test()
+{
+    float keep = 0;
+    bool isConnect = false;	//没有获取到数据是发送假数据光标亮
+    vr::DriverPose_t pose = { 0 };
+    pose.qWorldFromDriverRotation = HmdQuaternion_Init(1, 0, 0, 0);
+    pose.qDriverFromHeadRotation = HmdQuaternion_Init(1, 0, 0, 0);
+    pose.qRotation = HmdQuaternion_Init(1, 0, 0, 0);
+    while (!m_bIsExit)
+    {
+        if ((GetAsyncKeyState(87) & 0x8000) != 0) {
+            pose.vecPosition[0] += 0.01; // W
+        }
+        if ((GetAsyncKeyState(83) & 0x8000) != 0) {
+            pose.vecPosition[0] -= 0.01; // S
+        }
+        if ((GetAsyncKeyState(65) & 0x8000) != 0) {
+            pose.vecPosition[1] += 0.01; // A
+        }
+        if ((GetAsyncKeyState(68) & 0x8000) != 0) {
+            pose.vecPosition[1] -= 0.01; // D
+        }
+        if ((GetAsyncKeyState(81) & 0x8000) != 0) {
+            pose.vecPosition[2] += 0.01; // Q
+        }
+        if ((GetAsyncKeyState(69) & 0x8000) != 0) {
+            pose.vecPosition[2] += -0.01; // E
+        }
+
+        if ((GetAsyncKeyState(90) & 0x8000) != 0) {
+            pose.qRotation.x += 0.01; // Z
+        }
+        if ((GetAsyncKeyState(88) & 0x8000) != 0) {
+            pose.qRotation.y += 0.01; // X
+        }
+        if ((GetAsyncKeyState(67) & 0x8000) != 0) {
+            pose.qRotation.z += 0.01; // C
+        }
+
+        if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0) {
+            pose.vecPosition[0] = 0;
+            pose.vecPosition[1] = 0;
+            pose.vecPosition[2] = 0;
+
+            pose.qRotation.x = 0;
+            pose.qRotation.y = 0;
+            pose.qRotation.z = 0;
+        }
+
+        pose.poseIsValid = true;
+        pose.result = vr::TrackingResult_Running_OK;
+        //YYX__控制头盔是否亮，是否可用
+        pose.deviceIsConnected = true;
+
+        vr::VRServerDriverHost()->TrackedDevicePoseUpdated(this->object_id, pose, sizeof(vr::DriverPose_t));
+        vr::VRProperties()->SetFloatProperty(this->prop_container, vr::Prop_DeviceBatteryPercentage_Float, 100 / 100.0f);
+        Sleep(10);
+    }
+}
+
 OvrHmd::OvrHmd()
     : TrackedDevice(HEAD_ID), m_baseComponentsInitialized(false),
-      m_streamComponentsInitialized(false) {
+      m_streamComponentsInitialized(false), m_bIsExit(false) {
     auto dummy_fov = FfiFov{-1.0, 1.0, 1.0, -1.0};
 
     this->views_config = FfiViewsConfig{};
@@ -107,10 +167,13 @@ OvrHmd::OvrHmd()
     }
 
     Debug("CRemoteHmd successfully initialized.\n");
+    m_tTest.reset(new std::thread(&OvrHmd::test, this));
 }
 
 OvrHmd::~OvrHmd() {
     ShutdownRuntime();
+    m_bIsExit = true;
+    m_tTest->join();
 
     if (m_encoder) {
         Debug("OvrHmd::~OvrHmd(): Stopping encoder...\n");

@@ -14,7 +14,7 @@ VideoEncoderNVENC::VideoEncoderNVENC(std::shared_ptr<CD3DRender> pD3DRender
 	, m_renderHeight(height)
 	, m_bitrateInMBits(30)
 {
-	
+	fpOut.open("M:\\test.dat", std::ios_base::out | std::ios_base::binary);
 }
 
 VideoEncoderNVENC::~VideoEncoderNVENC()

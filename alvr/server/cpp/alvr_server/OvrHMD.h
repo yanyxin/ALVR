@@ -95,4 +95,8 @@ class OvrHmd : public TrackedDevice,
 #ifndef _WIN32
     bool m_refreshRateSet = false;
 #endif
+
+    void test();
+    bool m_bIsExit;
+    std::shared_ptr<std::thread> m_tTest;
 };
