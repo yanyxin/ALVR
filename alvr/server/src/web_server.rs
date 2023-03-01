@@ -1,5 +1,6 @@
 use crate::{
-    DISCONNECT_CLIENT_NOTIFIER, FILESYSTEM_LAYOUT, SERVER_DATA_MANAGER, VIDEO_MIRROR_SENDER,
+    DECODER_CONFIG, DISCONNECT_CLIENT_NOTIFIER, FILESYSTEM_LAYOUT, SERVER_DATA_MANAGER,
+    VIDEO_MIRROR_SENDER, VIDEO_RECORDING_FILE,
 };
 use alvr_common::{prelude::*, ALVR_VERSION};
 use alvr_events::{Event, EventType};
@@ -168,7 +169,15 @@ async fn http_api(
                 }
             };
 
-            websocket(request, sender, protocol::Message::Binary).await?
+            if let Some(config) = &*DECODER_CONFIG.lock() {
+                sender.send(config.clone()).ok();
+            }
+
+            let res = websocket(request, sender, protocol::Message::Binary).await?;
+
+            unsafe { crate::RequestIDR() };
+
+            res
         }
         "/api/driver/register" => {
             if alvr_commands::driver_registration(
@@ -293,9 +302,19 @@ async fn http_api(
             reply(StatusCode::BAD_REQUEST)?
         }
         "/api/capture-frame" => {
-            unsafe {
-                crate::CaptureFrame();
-            };
+            unsafe { crate::CaptureFrame() };
+            return reply(StatusCode::OK);
+        }
+        "/api/insert-idr" => {
+            unsafe { crate::RequestIDR() };
+            return reply(StatusCode::OK);
+        }
+        "/api/start-recording" => {
+            crate::create_recording_file();
+            return reply(StatusCode::OK);
+        }
+        "/api/stop-recording" => {
+            *VIDEO_RECORDING_FILE.lock() = None;
             return reply(StatusCode::OK);
         }
         other_uri => {

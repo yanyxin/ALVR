@@ -1,12 +1,12 @@
-#include "OvrHMD.h"
+#include "HMD.h"
 
+#include "Controller.h"
 #include "Logger.h"
-#include "OvrController.h"
-#include "OvrViveTrackerProxy.h"
 #include "Paths.h"
 #include "PoseHistory.h"
 #include "Settings.h"
 #include "Utils.h"
+#include "ViveTrackerProxy.h"
 #include "bindings.h"
 #include <cfloat>
 
@@ -31,22 +31,7 @@ vr::HmdRect2_t fov_to_projection(FfiFov fov) {
     return proj_bounds;
 }
 
-void fixInvalidHaptics(float hapticFeedback[3]) {
-    // Assign a 5ms duration to legacy haptics pulses which otherwise have 0 duration and wouldn't
-    // play.
-    if (hapticFeedback[1] == 0.0f) {
-        hapticFeedback[1] = 0.005f;
-    }
-}
-
-inline vr::ETrackedDeviceClass getControllerDeviceClass() {
-    // index == 8/9 == "HTCViveTracker.json"
-    if (Settings::Instance().m_controllerMode == 8 || Settings::Instance().m_controllerMode == 9)
-        return vr::TrackedDeviceClass_GenericTracker;
-    return vr::TrackedDeviceClass_Controller;
-}
-
-OvrHmd::OvrHmd()
+Hmd::Hmd()
     : TrackedDevice(HEAD_ID), m_baseComponentsInitialized(false),
       m_streamComponentsInitialized(false) {
     auto dummy_fov = FfiFov{-1.0, 1.0, 1.0, -1.0};
@@ -69,39 +54,12 @@ OvrHmd::OvrHmd()
     m_deviceClass = Settings::Instance().m_TrackingRefOnly
                         ? vr::TrackedDeviceClass_TrackingReference
                         : vr::TrackedDeviceClass_HMD;
-    bool ret;
-    ret = vr::VRServerDriverHost()->TrackedDeviceAdded(
-        GetSerialNumber().c_str(), m_deviceClass, this);
-    if (!ret) {
-        Warn("Failed to register device");
-    }
-
-    if (!Settings::Instance().m_disableController) {
-        m_leftController = std::make_shared<OvrController>(LEFT_HAND_ID);
-        ret = vr::VRServerDriverHost()->TrackedDeviceAdded(
-            m_leftController->GetSerialNumber().c_str(),
-            getControllerDeviceClass(),
-            m_leftController.get());
-        if (!ret) {
-            Warn("Failed to register left controller");
-        }
-
-        m_rightController = std::make_shared<OvrController>(RIGHT_HAND_ID);
-        ret = vr::VRServerDriverHost()->TrackedDeviceAdded(
-            m_rightController->GetSerialNumber().c_str(),
-            getControllerDeviceClass(),
-            m_rightController.get());
-        if (!ret) {
-            Warn("Failed to register right controller");
-        }
-    }
 
     if (Settings::Instance().m_enableViveTrackerProxy) {
-        m_viveTrackerProxy = std::make_shared<OvrViveTrackerProxy>(*this);
-        ret = vr::VRServerDriverHost()->TrackedDeviceAdded(m_viveTrackerProxy->GetSerialNumber(),
-                                                           vr::TrackedDeviceClass_GenericTracker,
-                                                           m_viveTrackerProxy.get());
-        if (!ret) {
+        m_viveTrackerProxy = std::make_unique<ViveTrackerProxy>(*this);
+        if (!vr::VRServerDriverHost()->TrackedDeviceAdded(m_viveTrackerProxy->GetSerialNumber(),
+                                                          vr::TrackedDeviceClass_GenericTracker,
+                                                          m_viveTrackerProxy.get())) {
             Warn("Failed to register Vive tracker");
         }
     }
@@ -109,11 +67,11 @@ OvrHmd::OvrHmd()
     Debug("CRemoteHmd successfully initialized.\n");
 }
 
-OvrHmd::~OvrHmd() {
+Hmd::~Hmd() {
     ShutdownRuntime();
 
     if (m_encoder) {
-        Debug("OvrHmd::~OvrHmd(): Stopping encoder...\n");
+        Debug("Hmd::~Hmd(): Stopping encoder...\n");
         m_encoder->Stop();
         m_encoder.reset();
     }
@@ -126,9 +84,9 @@ OvrHmd::~OvrHmd() {
 #endif
 }
 
-std::string OvrHmd::GetSerialNumber() const { return Settings::Instance().mSerialNumber; }
+std::string Hmd::GetSerialNumber() const { return Settings::Instance().mSerialNumber; }
 
-vr::EVRInitError OvrHmd::Activate(vr::TrackedDeviceIndex_t unObjectId) {
+vr::EVRInitError Hmd::Activate(vr::TrackedDeviceIndex_t unObjectId) {
     Debug("CRemoteHmd Activate %d\n", unObjectId);
 
     auto vr_properties = vr::VRProperties();
@@ -279,12 +237,12 @@ vr::EVRInitError OvrHmd::Activate(vr::TrackedDeviceIndex_t unObjectId) {
     return vr::VRInitError_None;
 }
 
-void OvrHmd::Deactivate() {
+void Hmd::Deactivate() {
     this->object_id = vr::k_unTrackedDeviceIndexInvalid;
     this->prop_container = vr::k_ulInvalidPropertyContainer;
 }
 
-void *OvrHmd::GetComponent(const char *component_name_and_version) {
+void *Hmd::GetComponent(const char *component_name_and_version) {
     // NB: "this" pointer needs to be statically cast to point to the correct vtable
 
     auto name_and_vers = std::string(component_name_and_version);
@@ -301,50 +259,51 @@ void *OvrHmd::GetComponent(const char *component_name_and_version) {
     return nullptr;
 }
 
-vr::DriverPose_t OvrHmd::GetPose() { return m_pose; }
+vr::DriverPose_t Hmd::GetPose() { return m_pose; }
 
-void OvrHmd::OnPoseUpdated(uint64_t targetTimestampNs, FfiDeviceMotion motion) {
-    if (this->object_id != vr::k_unTrackedDeviceIndexInvalid) {
-        auto pose = vr::DriverPose_t{};
-        pose.poseIsValid = true;
-        pose.result = vr::TrackingResult_Running_OK;
-        pose.deviceIsConnected = true;
+void Hmd::OnPoseUpdated(uint64_t targetTimestampNs, FfiDeviceMotion motion) {
+    if (this->object_id == vr::k_unTrackedDeviceIndexInvalid) {
+        return;
+    }
+    auto pose = vr::DriverPose_t{};
+    pose.poseIsValid = true;
+    pose.result = vr::TrackingResult_Running_OK;
+    pose.deviceIsConnected = true;
 
-        pose.qWorldFromDriverRotation = HmdQuaternion_Init(1, 0, 0, 0);
-        pose.qDriverFromHeadRotation = HmdQuaternion_Init(1, 0, 0, 0);
+    pose.qWorldFromDriverRotation = HmdQuaternion_Init(1, 0, 0, 0);
+    pose.qDriverFromHeadRotation = HmdQuaternion_Init(1, 0, 0, 0);
 
-        pose.qRotation = HmdQuaternion_Init(
-            motion.orientation.w, motion.orientation.x, motion.orientation.y, motion.orientation.z);
+    pose.qRotation = HmdQuaternion_Init(
+        motion.orientation.w, motion.orientation.x, motion.orientation.y, motion.orientation.z);
 
-        pose.vecPosition[0] = motion.position[0];
-        pose.vecPosition[1] = motion.position[1];
-        pose.vecPosition[2] = motion.position[2];
+    pose.vecPosition[0] = motion.position[0];
+    pose.vecPosition[1] = motion.position[1];
+    pose.vecPosition[2] = motion.position[2];
 
-        m_pose = pose;
+    m_pose = pose;
 
-        m_poseHistory->OnPoseUpdated(targetTimestampNs, motion);
+    m_poseHistory->OnPoseUpdated(targetTimestampNs, motion);
 
-        vr::VRServerDriverHost()->TrackedDevicePoseUpdated(
-            this->object_id, pose, sizeof(vr::DriverPose_t));
+    vr::VRServerDriverHost()->TrackedDevicePoseUpdated(
+        this->object_id, pose, sizeof(vr::DriverPose_t));
 
-        if (m_viveTrackerProxy != nullptr)
-            m_viveTrackerProxy->update();
+    if (m_viveTrackerProxy)
+        m_viveTrackerProxy->update();
 
 #if !defined(_WIN32) && !defined(__APPLE__)
-        // This has to be set after initialization is done, because something in vrcompositor is
-        // setting it to 90Hz in the meantime
-        if (!m_refreshRateSet && m_encoder && m_encoder->IsConnected()) {
-            m_refreshRateSet = true;
-            vr::VRProperties()->SetFloatProperty(
-                this->prop_container,
-                vr::Prop_DisplayFrequency_Float,
-                static_cast<float>(Settings::Instance().m_refreshRate));
-        }
-#endif
+    // This has to be set after initialization is done, because something in vrcompositor is
+    // setting it to 90Hz in the meantime
+    if (!m_refreshRateSet && m_encoder && m_encoder->IsConnected()) {
+        m_refreshRateSet = true;
+        vr::VRProperties()->SetFloatProperty(
+            this->prop_container,
+            vr::Prop_DisplayFrequency_Float,
+            static_cast<float>(Settings::Instance().m_refreshRate));
     }
+#endif
 }
 
-void OvrHmd::StartStreaming() {
+void Hmd::StartStreaming() {
     vr::VRDriverInput()->UpdateBooleanComponent(m_proximity, true, 0.0);
 
     if (m_streamComponentsInitialized) {
@@ -380,11 +339,9 @@ void OvrHmd::StartStreaming() {
     m_streamComponentsInitialized = true;
 }
 
-void OvrHmd::StopStreaming() {
-    vr::VRDriverInput()->UpdateBooleanComponent(m_proximity, false, 0.0);
-}
+void Hmd::StopStreaming() { vr::VRDriverInput()->UpdateBooleanComponent(m_proximity, false, 0.0); }
 
-void OvrHmd::SetViewsConfig(FfiViewsConfig config) {
+void Hmd::SetViewsConfig(FfiViewsConfig config) {
     this->views_config = config;
 
     auto left_transform = MATRIX_IDENTITY;
@@ -403,7 +360,7 @@ void OvrHmd::SetViewsConfig(FfiViewsConfig config) {
         object_id, vr::VREvent_LensDistortionChanged, {}, 0);
 }
 
-void OvrHmd::GetWindowBounds(int32_t *pnX, int32_t *pnY, uint32_t *pnWidth, uint32_t *pnHeight) {
+void Hmd::GetWindowBounds(int32_t *pnX, int32_t *pnY, uint32_t *pnWidth, uint32_t *pnHeight) {
     Debug("GetWindowBounds %dx%d - %dx%d\n",
           0,
           0,
@@ -415,7 +372,7 @@ void OvrHmd::GetWindowBounds(int32_t *pnX, int32_t *pnY, uint32_t *pnWidth, uint
     *pnHeight = Settings::Instance().m_renderHeight;
 }
 
-bool OvrHmd::IsDisplayRealDisplay() {
+bool Hmd::IsDisplayRealDisplay() {
 #ifdef _WIN32
     return false;
 #else
@@ -423,13 +380,13 @@ bool OvrHmd::IsDisplayRealDisplay() {
 #endif
 }
 
-void OvrHmd::GetRecommendedRenderTargetSize(uint32_t *pnWidth, uint32_t *pnHeight) {
+void Hmd::GetRecommendedRenderTargetSize(uint32_t *pnWidth, uint32_t *pnHeight) {
     *pnWidth = Settings::Instance().m_recommendedTargetWidth / 2;
     *pnHeight = Settings::Instance().m_recommendedTargetHeight;
     Debug("GetRecommendedRenderTargetSize %dx%d\n", *pnWidth, *pnHeight);
 }
 
-void OvrHmd::GetEyeOutputViewport(
+void Hmd::GetEyeOutputViewport(
     vr::EVREye eEye, uint32_t *pnX, uint32_t *pnY, uint32_t *pnWidth, uint32_t *pnHeight) {
     *pnY = 0;
     *pnWidth = Settings::Instance().m_renderWidth / 2;
@@ -443,8 +400,7 @@ void OvrHmd::GetEyeOutputViewport(
     Debug("GetEyeOutputViewport Eye=%d %dx%d %dx%d\n", eEye, *pnX, *pnY, *pnWidth, *pnHeight);
 }
 
-void OvrHmd::GetProjectionRaw(
-    vr::EVREye eye, float *left, float *right, float *top, float *bottom) {
+void Hmd::GetProjectionRaw(vr::EVREye eye, float *left, float *right, float *top, float *bottom) {
     auto proj = fov_to_projection(this->views_config.fov[eye]);
     *left = proj.vTopLeft.v[0];
     *right = proj.vBottomRight.v[0];
@@ -452,6 +408,6 @@ void OvrHmd::GetProjectionRaw(
     *bottom = proj.vBottomRight.v[1];
 }
 
-vr::DistortionCoordinates_t OvrHmd::ComputeDistortion(vr::EVREye, float u, float v) {
+vr::DistortionCoordinates_t Hmd::ComputeDistortion(vr::EVREye, float u, float v) {
     return {{u, v}, {u, v}, {u, v}};
 }

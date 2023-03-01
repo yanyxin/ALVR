@@ -31,13 +31,15 @@ use alvr_common::{
 use alvr_events::EventType;
 use alvr_filesystem::{self as afs, Layout};
 use alvr_server_data::ServerDataManager;
-use alvr_session::{OpenvrPropValue, OpenvrPropertyKey};
+use alvr_session::{CodecType, OpenvrPropValue, OpenvrPropertyKey};
 use alvr_sockets::{ClientListAction, GpuVendor, Haptics, ServerControlPacket};
 use bitrate::BitrateManager;
 use statistics::StatisticsManager;
 use std::{
     collections::HashMap,
     ffi::{c_char, c_void, CStr, CString},
+    fs::File,
+    io::Write,
     ptr,
     sync::{
         self,
@@ -83,6 +85,7 @@ static HAPTICS_SENDER: Lazy<Mutex<Option<mpsc::UnboundedSender<Haptics>>>> =
     Lazy::new(|| Mutex::new(None));
 static VIDEO_MIRROR_SENDER: Lazy<Mutex<Option<broadcast::Sender<Vec<u8>>>>> =
     Lazy::new(|| Mutex::new(None));
+static VIDEO_RECORDING_FILE: Lazy<Mutex<Option<File>>> = Lazy::new(|| Mutex::new(None));
 
 static DISCONNECT_CLIENT_NOTIFIER: Lazy<Notify> = Lazy::new(Notify::new);
 static RESTART_NOTIFIER: Lazy<Notify> = Lazy::new(Notify::new);
@@ -158,6 +161,32 @@ pub fn to_ffi_openvr_prop(key: OpenvrPropertyKey, value: OpenvrPropValue) -> Ffi
         key: key as u32,
         type_,
         value,
+    }
+}
+
+pub fn create_recording_file() {
+    let codec = SERVER_DATA_MANAGER.read().settings().video.codec;
+    let ext = if matches!(codec, CodecType::H264) {
+        "h264"
+    } else {
+        "h265"
+    };
+
+    let path = FILESYSTEM_LAYOUT.log_dir.join(format!("recording.{ext}"));
+
+    match File::create(path) {
+        Ok(mut file) => {
+            if let Some(config) = &*DECODER_CONFIG.lock() {
+                file.write_all(config).ok();
+            }
+
+            *VIDEO_RECORDING_FILE.lock() = Some(file);
+
+            unsafe { RequestIDR() };
+        }
+        Err(e) => {
+            error!("Failed to record video on disk: {e}");
+        }
     }
 }
 
@@ -359,6 +388,10 @@ pub unsafe extern "C" fn HmdDriverFactory(
             sender.send(config_buffer.clone()).ok();
         }
 
+        if let Some(file) = &mut *VIDEO_RECORDING_FILE.lock() {
+            file.write_all(&config_buffer).ok();
+        }
+
         *DECODER_CONFIG.lock() = Some(config_buffer);
     }
 
@@ -375,6 +408,10 @@ pub unsafe extern "C" fn HmdDriverFactory(
 
             if let Some(sender) = &*VIDEO_MIRROR_SENDER.lock() {
                 sender.send(payload.clone()).ok();
+            }
+
+            if let Some(file) = &mut *VIDEO_RECORDING_FILE.lock() {
+                file.write_all(&payload).ok();
             }
 
             sender.send(VideoPacket { timestamp, payload }).ok();
