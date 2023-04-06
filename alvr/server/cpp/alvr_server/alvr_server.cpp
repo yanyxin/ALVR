@@ -23,8 +23,7 @@
 #include <optional>
 
 #ifdef __linux__
-                          vr::HmdMatrix34_t
-                          GetRawZeroPose();
+vr::HmdMatrix34_t GetRawZeroPose();
 #endif
 
 static void load_debug_privilege(void) {
@@ -75,31 +74,33 @@ class DriverProvider : public vr::IServerTrackedDeviceProvider {
         InitDriverLog(vr::VRDriverLog());
 
         this->hmd = std::make_unique<Hmd>();
-        if (vr::VRServerDriverHost()->TrackedDeviceAdded(this->hmd->GetSerialNumber().c_str(),
+        this->tracked_devices.insert({HEAD_ID, (TrackedDevice *)this->hmd.get()});
+        if (vr::VRServerDriverHost()->TrackedDeviceAdded(this->hmd->get_serial_number().c_str(),
                                                          this->hmd->GetDeviceClass(),
                                                          this->hmd.get())) {
-            this->tracked_devices.insert({HEAD_ID, (TrackedDevice *)this->hmd.get()});
         } else {
-            Warn("Failed to HMD device");
+            Warn("Failed to register HMD device");
         }
 
-        if (!Settings::Instance().m_disableController) {
+        if (Settings::Instance().m_enableControllers) {
             this->left_controller = std::make_unique<Controller>(LEFT_HAND_ID);
             this->right_controller = std::make_unique<Controller>(RIGHT_HAND_ID);
-            
-            if (!vr::VRServerDriverHost()->TrackedDeviceAdded(this->left_controller->GetSerialNumber().c_str(),
-                                                              this->left_controller->getControllerDeviceClass(),
-                                                              this->left_controller.get())) {
-                this->tracked_devices.insert({LEFT_HAND_ID, (TrackedDevice *)this->left_controller.get()});
-            } else {
+
+            this->tracked_devices.insert(
+                {LEFT_HAND_ID, (TrackedDevice *)this->left_controller.get()});
+            this->tracked_devices.insert(
+                {RIGHT_HAND_ID, (TrackedDevice *)this->right_controller.get()});
+
+            if (!vr::VRServerDriverHost()->TrackedDeviceAdded(
+                    this->left_controller->get_serial_number().c_str(),
+                    this->left_controller->getControllerDeviceClass(),
+                    this->left_controller.get())) {
                 Warn("Failed to register left controller");
             }
-
-            if (!vr::VRServerDriverHost()->TrackedDeviceAdded(this->right_controller->GetSerialNumber().c_str(), 
-                                                              this->right_controller->getControllerDeviceClass(), 
-                                                              this->right_controller.get())) {
-                this->tracked_devices.insert({RIGHT_HAND_ID, (TrackedDevice *)this->right_controller.get()});
-            } else {
+            if (!vr::VRServerDriverHost()->TrackedDeviceAdded(
+                    this->right_controller->get_serial_number().c_str(),
+                    this->right_controller->getControllerDeviceClass(),
+                    this->right_controller.get())) {
                 Warn("Failed to register right controller");
             }
         }
@@ -123,41 +124,18 @@ class DriverProvider : public vr::IServerTrackedDeviceProvider {
         vr::VREvent_t event;
         while (vr::VRServerDriverHost()->PollNextEvent(&event, sizeof(vr::VREvent_t))) {
             if (event.eventType == vr::VREvent_Input_HapticVibration) {
-                vr::VREvent_HapticVibration_t haptics_info = event.data.hapticVibration;
+                vr::VREvent_HapticVibration_t haptics = event.data.hapticVibration;
 
-                auto duration = haptics_info.fDurationSeconds;
-                auto amplitude = haptics_info.fAmplitude;
-
-                if (duration < Settings::Instance().m_hapticsMinDuration * 0.5)
-                    duration = Settings::Instance().m_hapticsMinDuration * 0.5;
-
-                amplitude =
-                    pow(amplitude *
-                            ((Settings::Instance().m_hapticsLowDurationAmplitudeMultiplier - 1) *
-                                 Settings::Instance().m_hapticsMinDuration *
-                                 Settings::Instance().m_hapticsLowDurationRange /
-                                 (pow(Settings::Instance().m_hapticsMinDuration *
-                                          Settings::Instance().m_hapticsLowDurationRange,
-                                      2) *
-                                      0.25 /
-                                      (duration -
-                                       0.5 * Settings::Instance().m_hapticsMinDuration *
-                                           (1 - Settings::Instance().m_hapticsLowDurationRange)) +
-                                  (duration -
-                                   0.5 * Settings::Instance().m_hapticsMinDuration *
-                                       (1 - Settings::Instance().m_hapticsLowDurationRange))) +
-                             1),
-                        1 - Settings::Instance().m_hapticsAmplitudeCurve);
-                duration =
-                    pow(Settings::Instance().m_hapticsMinDuration, 2) * 0.25 / duration + duration;
-
+                uint64_t id = 0;
                 if (this->left_controller &&
-                    haptics_info.containerHandle == this->left_controller->prop_container) {
-                    HapticsSend(LEFT_HAND_ID, duration, haptics_info.fFrequency, amplitude);
+                    haptics.containerHandle == this->left_controller->prop_container) {
+                    id = LEFT_HAND_ID;
                 } else if (this->right_controller &&
-                           haptics_info.containerHandle == this->right_controller->prop_container) {
-                    HapticsSend(RIGHT_HAND_ID, duration, haptics_info.fFrequency, amplitude);
+                           haptics.containerHandle == this->right_controller->prop_container) {
+                    id = RIGHT_HAND_ID;
                 }
+
+                HapticsSend(id, haptics.fDurationSeconds, haptics.fFrequency, haptics.fAmplitude);
             }
 #ifdef __linux__
             else if (event.eventType == vr::VREvent_ChaperoneUniverseHasChanged) {
@@ -187,14 +165,12 @@ unsigned int COMPRESS_AXIS_ALIGNED_CSO_LEN;
 const unsigned char *COLOR_CORRECTION_CSO_PTR;
 unsigned int COLOR_CORRECTION_CSO_LEN;
 
-const unsigned char *QUAD_SHADER_VERT_SPV_PTR;
-unsigned int QUAD_SHADER_VERT_SPV_LEN;
-const unsigned char *QUAD_SHADER_FRAG_SPV_PTR;
-unsigned int QUAD_SHADER_FRAG_SPV_LEN;
-const unsigned char *COLOR_SHADER_FRAG_SPV_PTR;
-unsigned int COLOR_SHADER_FRAG_SPV_LEN;
-const unsigned char *FFR_SHADER_FRAG_SPV_PTR;
-unsigned int FFR_SHADER_FRAG_SPV_LEN;
+const unsigned char *QUAD_SHADER_COMP_SPV_PTR;
+unsigned int QUAD_SHADER_COMP_SPV_LEN;
+const unsigned char *COLOR_SHADER_COMP_SPV_PTR;
+unsigned int COLOR_SHADER_COMP_SPV_LEN;
+const unsigned char *FFR_SHADER_COMP_SPV_PTR;
+unsigned int FFR_SHADER_COMP_SPV_LEN;
 const unsigned char *RGBTOYUV420_SHADER_COMP_SPV_PTR;
 unsigned int RGBTOYUV420_SHADER_COMP_SPV_LEN;
 
@@ -216,6 +192,8 @@ void (*ReportPresent)(unsigned long long timestamp_ns, unsigned long long offset
 void (*ReportComposed)(unsigned long long timestamp_ns, unsigned long long offset_ns);
 void (*ReportEncoded)(unsigned long long timestamp_ns);
 FfiDynamicEncoderParams (*GetDynamicEncoderParams)();
+unsigned long long (*GetSerialNumber)(unsigned long long deviceID, char *outString);
+void (*SetOpenvrProps)(unsigned long long deviceID);
 
 void *CppEntryPoint(const char *interface_name, int *return_code) {
     // Initialize path constants
@@ -297,8 +275,8 @@ void ShutdownSteamvr() {
     }
 }
 
-void SetOpenvrProperty(unsigned long long top_level_path, FfiOpenvrProperty prop) {
-    auto device_it = g_driver_provider.tracked_devices.find(top_level_path);
+void SetOpenvrProperty(unsigned long long deviceID, FfiOpenvrProperty prop) {
+    auto device_it = g_driver_provider.tracked_devices.find(deviceID);
 
     if (device_it != g_driver_provider.tracked_devices.end()) {
         device_it->second->set_prop(prop);
@@ -311,8 +289,8 @@ void SetViewsConfig(FfiViewsConfig config) {
     }
 }
 
-void SetBattery(unsigned long long top_level_path, float gauge_value, bool is_plugged) {
-    auto device_it = g_driver_provider.tracked_devices.find(top_level_path);
+void SetBattery(unsigned long long deviceID, float gauge_value, bool is_plugged) {
+    auto device_it = g_driver_provider.tracked_devices.find(deviceID);
 
     if (device_it != g_driver_provider.tracked_devices.end()) {
         vr::VRProperties()->SetFloatProperty(
@@ -324,9 +302,8 @@ void SetBattery(unsigned long long top_level_path, float gauge_value, bool is_pl
 
 void SetButton(unsigned long long path, FfiButtonValue value) {
     if (g_driver_provider.left_controller &&
-        std::find(LEFT_CONTROLLER_BUTTON_IDS.begin(), 
-            LEFT_CONTROLLER_BUTTON_IDS.end(), 
-            path) != LEFT_CONTROLLER_BUTTON_IDS.end()) {
+        std::find(LEFT_CONTROLLER_BUTTON_IDS.begin(), LEFT_CONTROLLER_BUTTON_IDS.end(), path) !=
+            LEFT_CONTROLLER_BUTTON_IDS.end()) {
         g_driver_provider.left_controller->SetButton(path, value);
     } else if (g_driver_provider.right_controller &&
                std::find(RIGHT_CONTROLLER_BUTTON_IDS.begin(),

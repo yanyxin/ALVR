@@ -41,7 +41,7 @@ private:
 class VkContext
 {
 public:
-  VkContext(const char* device, const std::vector<const char*> &requiredDeviceExtensions);
+  VkContext(const uint8_t* deviceUUID, const std::vector<const char*> &requiredDeviceExtensions);
   ~VkContext();
   VkDevice get_vk_device() const { return device;}
   VkInstance get_vk_instance() const { return instance;}
@@ -54,7 +54,7 @@ public:
   VkInstance instance = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
   VkDevice device = VK_NULL_HANDLE;
-  uint32_t queueFamilyIndex;
+  uint32_t queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   std::vector<const char*> instanceExtensions;
   std::vector<const char*> deviceExtensions;
   bool amd = false;

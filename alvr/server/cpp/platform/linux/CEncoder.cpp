@@ -211,7 +211,7 @@ void CEncoder::Run() {
           deviceExtensions = alvr::AMFContext::get()->requiredDeviceExtensions();
       }
 
-      alvr::VkContext vk_ctx(init.device_name.data(), deviceExtensions);
+      alvr::VkContext vk_ctx(init.device_uuid.data(), deviceExtensions);
 
       FrameRender render(vk_ctx, init, m_fds);
       auto output = render.CreateOutput();
@@ -263,7 +263,7 @@ void CEncoder::Run() {
           auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
           composed_offset = now - encode_timestamp.cpu;
         } else {
-          Error("Invalid encoder timestamp!");
+          composed_offset = render_timestamps.now - render_timestamps.renderComplete;
         }
 
         if (present_offset < composed_offset) {

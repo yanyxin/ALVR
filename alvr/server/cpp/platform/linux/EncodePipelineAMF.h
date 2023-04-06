@@ -80,20 +80,17 @@ private:
 
     amf::AMFFactory *m_amfFactory = nullptr;
     amf::AMFContextPtr m_amfContext;
+    amf::AMFContext1Ptr m_amfContext1;
     std::unique_ptr<AMFPipeline> m_pipeline;
     std::vector<amf::AMFComponentPtr> m_amfComponents;
 
     Renderer *m_render;
-    VkQueryPool m_queryPool = VK_NULL_HANDLE;
-    VkCommandBuffer m_commandBuffer = VK_NULL_HANDLE;
-
     amf::AMF_SURFACE_FORMAT m_surfaceFormat;
 
     int m_codec;
     int m_refreshRate;
     int m_renderWidth;
     int m_renderHeight;
-    int m_bitrateInMBits;
 
     bool m_hasQueryTimeout = false;
     amf::AMFBufferPtr m_frameBuffer;

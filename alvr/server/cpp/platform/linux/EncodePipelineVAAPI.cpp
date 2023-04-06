@@ -186,7 +186,6 @@ alvr::EncodePipelineVAAPI::EncodePipelineVAAPI(Renderer *render, VkContext &vk_c
   encoder_ctx->width = width;
   encoder_ctx->height = height;
   encoder_ctx->time_base = {1, (int)1e9};
-  encoder_ctx->framerate = AVRational{settings.m_refreshRate, 1};
   encoder_ctx->sample_aspect_ratio = AVRational{1, 1};
   encoder_ctx->pix_fmt = AV_PIX_FMT_VAAPI;
   encoder_ctx->max_b_frames = 0;
@@ -195,13 +194,13 @@ alvr::EncodePipelineVAAPI::EncodePipelineVAAPI(Renderer *render, VkContext &vk_c
   auto params = FfiDynamicEncoderParams {};
   params.updated = true;
   params.bitrate_bps = 30'000'000;
-  params.framerate = 60.0;
+  params.framerate = settings.m_refreshRate;
   SetParams(params);
 
   vlVaQualityBits quality = {};
   quality.valid_setting = 1;
   quality.vbaq_mode = Settings::Instance().m_enableVbaq;  //No noticable performance difference and should improve subjective quality by allocating more bits to smooth areas
-  switch (settings.m_encoderQualityPreset)
+  switch (settings.m_amdEncoderQualityPreset)
   {
     case ALVR_QUALITY:
       if (vk_ctx.amd) {
@@ -325,4 +324,20 @@ void alvr::EncodePipelineVAAPI::PushFrame(uint64_t targetTimestampNs, bool idr)
     throw alvr::AvException("avcodec_send_frame failed: ", err);
   }
   av_frame_unref(encoder_frame);
+}
+
+void alvr::EncodePipelineVAAPI::SetParams(FfiDynamicEncoderParams params)
+{
+  if (!params.updated) {
+    return;
+  }
+  if (Settings::Instance().m_codec == ALVR_CODEC_H265) {
+    // hevc doesn't work well with adaptive bitrate/fps
+    params.framerate = Settings::Instance().m_refreshRate;
+  }
+  encoder_ctx->bit_rate = params.bitrate_bps;
+  encoder_ctx->framerate = AVRational{int(params.framerate * 1000), 1000};
+  encoder_ctx->rc_buffer_size = encoder_ctx->bit_rate / params.framerate * 1.1;
+  encoder_ctx->rc_max_rate = encoder_ctx->bit_rate;
+  encoder_ctx->rc_initial_buffer_occupancy = encoder_ctx->rc_buffer_size / 4 * 3;
 }
